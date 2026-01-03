@@ -2325,27 +2325,27 @@ void _convertElementToParagraphs(
       }
       break;
     case 'h1':
-      fontSize = 24.0;
+      fontSize = 32.0;
       isBold = true;
       break;
     case 'h2':
-      fontSize = 20.0;
+      fontSize = 26.0;
       isBold = true;
       break;
     case 'h3':
-      fontSize = 16.0;
+      fontSize = 20.0;
       isBold = true;
       break;
     case 'h4':
-      fontSize = 14.0;
+      fontSize = 16.0;
       isBold = true;
       break;
     case 'h5':
-      fontSize = 13.0;
+      fontSize = 14.0;
       isBold = true;
       break;
     case 'h6':
-      fontSize = 12.0;
+      fontSize = 13.0;
       isBold = true;
       break;
     case 'blockquote':

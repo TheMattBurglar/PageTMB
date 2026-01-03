@@ -5,13 +5,17 @@ import '../logic/editor_controller.dart';
 class EditorToolbar extends StatelessWidget {
   final EditorController controller;
   final double zoomLevel;
-  final ValueChanged<double> onZoomChanged;
+  final VoidCallback? onZoomIn;
+  final VoidCallback? onZoomOut;
+  final VoidCallback? onResetZoom;
 
   const EditorToolbar({
     super.key,
     required this.controller,
     required this.zoomLevel,
-    required this.onZoomChanged,
+    this.onZoomIn,
+    this.onZoomOut,
+    this.onResetZoom,
   });
 
   @override
@@ -103,15 +107,13 @@ class EditorToolbar extends StatelessWidget {
             _ToolbarButton(
               icon: Icons.zoom_out,
               isSelected: false,
-              onPressed: zoomLevel > 1.0
-                  ? () => onZoomChanged((zoomLevel - 0.1).clamp(1.0, 3.0))
-                  : null,
+              onPressed: onZoomOut,
               tooltip: 'Zoom Out',
             ),
             SizedBox(
               width: 50,
               child: Text(
-                '${(zoomLevel * 100).toInt()}%',
+                '${(zoomLevel * 100).round()}%',
                 textAlign: TextAlign.center,
                 style: const TextStyle(
                   fontSize: 12,
@@ -122,15 +124,13 @@ class EditorToolbar extends StatelessWidget {
             _ToolbarButton(
               icon: Icons.zoom_in,
               isSelected: false,
-              onPressed: zoomLevel < 3.0
-                  ? () => onZoomChanged(zoomLevel + 0.1)
-                  : null,
+              onPressed: onZoomIn,
               tooltip: 'Zoom In',
             ),
             _ToolbarButton(
               icon: Icons.settings_backup_restore,
               isSelected: false,
-              onPressed: zoomLevel != 1.0 ? () => onZoomChanged(1.0) : null,
+              onPressed: onResetZoom,
               tooltip: 'Reset Zoom',
             ),
           ],

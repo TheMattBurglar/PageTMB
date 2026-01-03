@@ -59,10 +59,25 @@ class EditorPage extends StatefulWidget {
 class _EditorPageState extends State<EditorPage> {
   Offset? _lastTapLocalPosition;
 
-  double _pixelLock(double value, double dpr) {
-    if (widget.zoomLevel == 0) return value;
-    final scale = widget.zoomLevel * dpr;
+  double _pixelLock(double value, double dpr, {bool forceCeil = false}) {
+    final scale = (widget.zoomLevel == 0 ? 1.0 : widget.zoomLevel) * dpr;
+    if (forceCeil) {
+      return (value * scale).ceilToDouble() / scale;
+    }
     return (value * scale).roundToDouble() / scale;
+  }
+
+  String _getFontForMode(EditorMode mode) {
+    switch (mode) {
+      case EditorMode.screenplay:
+        return PageConstants.screenplayFont;
+      case EditorMode.manuscript:
+        return PageConstants.manuscriptFont;
+      case EditorMode.essay:
+        return PageConstants.essayFont;
+      case EditorMode.freestyle:
+        return PageConstants.freestyleFont;
+    }
   }
 
   @override
@@ -100,6 +115,7 @@ class _EditorPageState extends State<EditorPage> {
     final lockedWidth = _pixelLock(
       PageConstants.pageWidth - widget.margins.left - widget.margins.right,
       dpr,
+      forceCeil: true,
     );
 
     if (activeRelativeIdx != null) {
@@ -117,6 +133,7 @@ class _EditorPageState extends State<EditorPage> {
       final structuralLeftOffset = p.structuralLeftOffset;
       final textPainter = p.buildPainter(
         maxWidth: lockedWidth - structuralLeftOffset,
+        defaultFontFamily: _getFontForMode(widget.editorMode),
       );
 
       // Use a consistent height for the caret (font size) and center it
@@ -226,93 +243,98 @@ class _EditorPageState extends State<EditorPage> {
                   child: OverflowBox(
                     maxHeight: double.infinity,
                     alignment: Alignment.topLeft,
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: widget.paragraphs.indexed.map((entry) {
-                        final idx = entry.$1;
-                        final p = entry.$2;
+                    child: SizedBox(
+                      width: lockedWidth,
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: widget.paragraphs.indexed.map((entry) {
+                          final idx = entry.$1;
+                          final p = entry.$2;
 
-                        // Selection logic per paragraph
-                        int? selStart;
-                        int? selEnd;
+                          // Selection logic per paragraph
+                          int? selStart;
+                          int? selEnd;
 
-                        if (widget.selectionAnchorParagraphIndex != null &&
-                            widget.selectionAnchorOffset != null &&
-                            widget.cursorParagraphIndex != null &&
-                            widget.cursorOffset != null) {
-                          final anchorGlobalIdx =
-                              widget.selectionAnchorParagraphIndex!;
-                          final cursorGlobalIdx = widget.cursorParagraphIndex!;
+                          if (widget.selectionAnchorParagraphIndex != null &&
+                              widget.selectionAnchorOffset != null &&
+                              widget.cursorParagraphIndex != null &&
+                              widget.cursorOffset != null) {
+                            final anchorGlobalIdx =
+                                widget.selectionAnchorParagraphIndex!;
+                            final cursorGlobalIdx =
+                                widget.cursorParagraphIndex!;
 
-                          final startP = anchorGlobalIdx < cursorGlobalIdx
-                              ? anchorGlobalIdx
-                              : cursorGlobalIdx;
-                          final endP = anchorGlobalIdx > cursorGlobalIdx
-                              ? anchorGlobalIdx
-                              : cursorGlobalIdx;
+                            final startP = anchorGlobalIdx < cursorGlobalIdx
+                                ? anchorGlobalIdx
+                                : cursorGlobalIdx;
+                            final endP = anchorGlobalIdx > cursorGlobalIdx
+                                ? anchorGlobalIdx
+                                : cursorGlobalIdx;
 
-                          final globalIdx =
-                              p.originalIndex ??
-                              (widget.pageParagraphOffset + idx);
+                            final globalIdx =
+                                p.originalIndex ??
+                                (widget.pageParagraphOffset + idx);
 
-                          if (globalIdx >= startP && globalIdx <= endP) {
-                            int pLength = 0;
-                            for (var r in p.runs) {
-                              pLength += r.text.length;
-                            }
+                            if (globalIdx >= startP && globalIdx <= endP) {
+                              int pLength = 0;
+                              for (var r in p.runs) {
+                                pLength += r.text.length;
+                              }
 
-                            // Calculate raw start/end offsets for this paragraph
-                            int localStart = 0;
-                            int localEnd = pLength;
+                              // Calculate raw start/end offsets for this paragraph
+                              int localStart = 0;
+                              int localEnd = pLength;
 
-                            if (globalIdx == startP) {
-                              int anchor = (startP == anchorGlobalIdx)
-                                  ? widget.selectionAnchorOffset!
-                                  : widget.cursorOffset!;
-                              localStart = anchor;
-                            }
+                              if (globalIdx == startP) {
+                                int anchor = (startP == anchorGlobalIdx)
+                                    ? widget.selectionAnchorOffset!
+                                    : widget.cursorOffset!;
+                                localStart = anchor;
+                              }
 
-                            if (globalIdx == endP) {
-                              int cursor = (endP == cursorGlobalIdx)
-                                  ? widget.cursorOffset!
-                                  : widget.selectionAnchorOffset!;
-                              localEnd = cursor;
-                            }
+                              if (globalIdx == endP) {
+                                int cursor = (endP == cursorGlobalIdx)
+                                    ? widget.cursorOffset!
+                                    : widget.selectionAnchorOffset!;
+                                localEnd = cursor;
+                              }
 
-                            // Ensure start <= end for valid range
-                            if (startP == endP) {
-                              // Single paragraph selection: must handle swapped anchor/cursor
-                              int a = widget.selectionAnchorOffset!;
-                              int c = widget.cursorOffset!;
-                              selStart = a < c ? a : c;
-                              selEnd = a > c ? a : c;
-                            } else {
-                              // Multi-paragraph: localStart/localEnd are already correct relative to p bounds
-                              selStart = localStart;
-                              selEnd = localEnd;
+                              // Ensure start <= end for valid range
+                              if (startP == endP) {
+                                // Single paragraph selection: must handle swapped anchor/cursor
+                                int a = widget.selectionAnchorOffset!;
+                                int c = widget.cursorOffset!;
+                                selStart = a < c ? a : c;
+                                selEnd = a > c ? a : c;
+                              } else {
+                                // Multi-paragraph: localStart/localEnd are already correct relative to p bounds
+                                selStart = localStart;
+                                selEnd = localEnd;
+                              }
                             }
                           }
-                        }
 
-                        bool connectsToNext = false;
-                        if (p.type == ParagraphType.blockquote &&
-                            idx < widget.paragraphs.length - 1) {
-                          if (widget.paragraphs[idx + 1].type ==
-                              ParagraphType.blockquote) {
-                            connectsToNext = true;
+                          bool connectsToNext = false;
+                          if (p.type == ParagraphType.blockquote &&
+                              idx < widget.paragraphs.length - 1) {
+                            if (widget.paragraphs[idx + 1].type ==
+                                ParagraphType.blockquote) {
+                              connectsToNext = true;
+                            }
                           }
-                        }
 
-                        return _buildParagraph(
-                          p,
-                          p.originalIndex ?? (widget.pageParagraphOffset + idx),
-                          lockedWidth,
-                          dpr,
-                          selStart: selStart,
-                          selEnd: selEnd,
-                          connectsToNext: connectsToNext,
-                        );
-                      }).toList(),
+                          return _buildParagraph(
+                            p,
+                            p.originalIndex ??
+                                (widget.pageParagraphOffset + idx),
+                            lockedWidth,
+                            dpr,
+                            selStart: selStart,
+                            selEnd: selEnd,
+                            connectsToNext: connectsToNext,
+                          );
+                        }).toList(),
+                      ),
                     ),
                   ),
                 ),
@@ -337,7 +359,14 @@ class _EditorPageState extends State<EditorPage> {
 
   void _handleTap(Offset localPosition, bool extendSelection) {
     final dpr = MediaQuery.of(context).devicePixelRatio;
-    double y = localPosition.dy - widget.margins.top;
+    final lockedTopMargin = _pixelLock(widget.margins.top, dpr);
+    final lockedLeftMargin = _pixelLock(widget.margins.left, dpr);
+    final lockedWidth = _pixelLock(
+      PageConstants.pageWidth - widget.margins.left - widget.margins.right,
+      dpr,
+      forceCeil: true,
+    );
+    double y = localPosition.dy - lockedTopMargin;
     if (y < 0) {
       widget.onTap!(widget.pageParagraphOffset, 0, extendSelection);
       return;
@@ -346,23 +375,15 @@ class _EditorPageState extends State<EditorPage> {
 
     for (int i = 0; i < widget.paragraphs.length; i++) {
       final p = widget.paragraphs[i];
-      final pHeight = _measureParagraphHeight(
-        p,
-        PageConstants.pageWidth - widget.margins.left - widget.margins.right,
-        dpr,
-      );
+      final pHeight = _measureParagraphHeight(p, lockedWidth, dpr);
 
       if (y >= currentY && y < currentY + pHeight) {
-        final pWidth =
-            PageConstants.pageWidth -
-            widget.margins.left -
-            widget.margins.right;
         final structuralLeftOffset = p.structuralLeftOffset;
         final offset = _getOffsetForPosition(
           p,
-          pWidth - structuralLeftOffset,
+          lockedWidth - structuralLeftOffset,
           Offset(
-            localPosition.dx - widget.margins.left - structuralLeftOffset,
+            localPosition.dx - lockedLeftMargin - structuralLeftOffset - 4.0,
             y - currentY,
           ),
         );
@@ -390,29 +411,28 @@ class _EditorPageState extends State<EditorPage> {
 
   void _handleDoubleTap(Offset localPosition) {
     final dpr = MediaQuery.of(context).devicePixelRatio;
-    double y = localPosition.dy - widget.margins.top;
+    final lockedTopMargin = _pixelLock(widget.margins.top, dpr);
+    final lockedLeftMargin = _pixelLock(widget.margins.left, dpr);
+    final lockedWidth = _pixelLock(
+      PageConstants.pageWidth - widget.margins.left - widget.margins.right,
+      dpr,
+      forceCeil: true,
+    );
+    double y = localPosition.dy - lockedTopMargin;
     if (y < 0) return;
     double currentY = 0;
 
     for (int i = 0; i < widget.paragraphs.length; i++) {
       final p = widget.paragraphs[i];
-      final pHeight = _measureParagraphHeight(
-        p,
-        PageConstants.pageWidth - widget.margins.left - widget.margins.right,
-        dpr,
-      );
+      final pHeight = _measureParagraphHeight(p, lockedWidth, dpr);
 
       if (y >= currentY && y < currentY + pHeight) {
-        final pWidth =
-            PageConstants.pageWidth -
-            widget.margins.left -
-            widget.margins.right;
         final structuralLeftOffset = p.structuralLeftOffset;
         final offset = _getOffsetForPosition(
           p,
-          pWidth - structuralLeftOffset,
+          lockedWidth - structuralLeftOffset,
           Offset(
-            localPosition.dx - widget.margins.left - structuralLeftOffset,
+            localPosition.dx - lockedLeftMargin - structuralLeftOffset - 4.0,
             y - currentY,
           ),
         );
@@ -427,29 +447,28 @@ class _EditorPageState extends State<EditorPage> {
 
   void _handleSecondaryTap(Offset localPosition, Offset globalPosition) {
     final dpr = MediaQuery.of(context).devicePixelRatio;
-    double y = localPosition.dy - widget.margins.top;
+    final lockedTopMargin = _pixelLock(widget.margins.top, dpr);
+    final lockedLeftMargin = _pixelLock(widget.margins.left, dpr);
+    final lockedWidth = _pixelLock(
+      PageConstants.pageWidth - widget.margins.left - widget.margins.right,
+      dpr,
+      forceCeil: true,
+    );
+    double y = localPosition.dy - lockedTopMargin;
     if (y < 0) return;
     double currentY = 0;
 
     for (int i = 0; i < widget.paragraphs.length; i++) {
       final p = widget.paragraphs[i];
-      final pHeight = _measureParagraphHeight(
-        p,
-        PageConstants.pageWidth - widget.margins.left - widget.margins.right,
-        dpr,
-      );
+      final pHeight = _measureParagraphHeight(p, lockedWidth, dpr);
 
       if (y >= currentY && y < currentY + pHeight) {
-        final pWidth =
-            PageConstants.pageWidth -
-            widget.margins.left -
-            widget.margins.right;
         final structuralLeftOffset = p.structuralLeftOffset;
         final offset = _getOffsetForPosition(
           p,
-          pWidth - structuralLeftOffset,
+          lockedWidth - structuralLeftOffset,
           Offset(
-            localPosition.dx - widget.margins.left - structuralLeftOffset,
+            localPosition.dx - lockedLeftMargin - structuralLeftOffset - 4.0,
             y - currentY,
           ),
         );
@@ -486,6 +505,7 @@ class _EditorPageState extends State<EditorPage> {
     final structuralLeftOffset = paragraph.structuralLeftOffset;
     final textPainter = paragraph.buildPainter(
       maxWidth: width - structuralLeftOffset,
+      defaultFontFamily: _getFontForMode(widget.editorMode),
     );
     final minLineHeight =
         (paragraph.runs.isNotEmpty
@@ -503,7 +523,10 @@ class _EditorPageState extends State<EditorPage> {
     double width,
     Offset localOffset,
   ) {
-    final textPainter = paragraph.buildPainter(maxWidth: width);
+    final textPainter = paragraph.buildPainter(
+      maxWidth: width,
+      defaultFontFamily: _getFontForMode(widget.editorMode),
+    );
     return textPainter.getPositionForOffset(localOffset).offset;
   }
 
@@ -580,6 +603,7 @@ class _EditorPageState extends State<EditorPage> {
       final runTextStyle = run.attributes.toTextStyle(
         height: p.lineSpacing,
         includeMonospaceBackground: p.type != ParagraphType.codeBlock,
+        defaultFontFamily: _getFontForMode(widget.editorMode),
       );
       final runLen = run.text.length;
       final runEnd = currentOffset + runLen;
@@ -616,7 +640,7 @@ class _EditorPageState extends State<EditorPage> {
 
     final String? firstFontFamily = p.runs.isNotEmpty
         ? p.runs.first.attributes.fontFamily
-        : null;
+        : _getFontForMode(widget.editorMode);
     Widget paragraphWidget = RichText(
       textAlign: _getParagraphTextAlign(p.alignment),
       text: TextSpan(
@@ -674,12 +698,18 @@ class _EditorPageState extends State<EditorPage> {
       final markerStr = p.isContinuation ? null : _getMarkerString(p);
       final String? firstFontFamily = p.runs.isNotEmpty
           ? p.runs.first.attributes.fontFamily
-          : null;
+          : _getFontForMode(widget.editorMode);
 
       final markerStyle =
           (p.runs.isNotEmpty
-                  ? p.runs.first.attributes.toTextStyle(height: p.lineSpacing)
-                  : const TextStyle(fontSize: 12.0))
+                  ? p.runs.first.attributes.toTextStyle(
+                      height: p.lineSpacing,
+                      defaultFontFamily: _getFontForMode(widget.editorMode),
+                    )
+                  : TextStyle(
+                      fontSize: 12.0,
+                      fontFamily: _getFontForMode(widget.editorMode),
+                    ))
               .copyWith(fontWeight: FontWeight.bold, color: Colors.black);
 
       final markerWidget = markerStr != null

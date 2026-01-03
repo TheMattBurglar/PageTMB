@@ -61,7 +61,48 @@ class _MainEditorPageState extends State<MainEditorPage> with TextInputClient {
   List<List<Paragraph>>? _cachedPages;
   int _lastPaginatedVersion = -1;
   EdgeInsets? _lastPaginatedMargins;
-  double _zoomLevel = 1.3;
+  static const List<double> _safeZoomLevels = [
+    1.0,
+    1.25,
+    1.3333333333, // 4/3
+    1.5,
+    1.6666666667, // 5/3
+    1.75,
+    2.0,
+    2.25,
+    2.3333333333, // 7/3
+    2.5,
+    3.0,
+  ];
+
+  double _zoomLevel = 1.3333333333; // Default to 4/3
+
+  void _zoomIn() {
+    setState(() {
+      final i = _safeZoomLevels.indexWhere((z) => z > _zoomLevel + 0.001);
+      if (i != -1) {
+        _zoomLevel = _safeZoomLevels[i];
+        _updateVisiblePages();
+      }
+    });
+  }
+
+  void _zoomOut() {
+    setState(() {
+      final i = _safeZoomLevels.lastIndexWhere((z) => z < _zoomLevel - 0.001);
+      if (i != -1) {
+        _zoomLevel = _safeZoomLevels[i];
+        _updateVisiblePages();
+      }
+    });
+  }
+
+  void _resetZoom() {
+    setState(() {
+      _zoomLevel = 1.0;
+      _updateVisiblePages();
+    });
+  }
 
   // Virtualization State
   int _firstVisiblePage = 0;
@@ -334,7 +375,14 @@ class _MainEditorPageState extends State<MainEditorPage> with TextInputClient {
     final cursorP = _controller.cursorParagraphIndex;
     final margins = _getMargins();
     final pages =
-        _cachedPages ?? Paginator.paginate(_controller.document, margins);
+        _cachedPages ??
+        Paginator.paginate(
+          _controller.document,
+          margins,
+          defaultFontFamily: _getFontForMode(_controller.currentMode),
+          dpr: MediaQuery.of(context).devicePixelRatio,
+          zoom: _zoomLevel,
+        );
 
     int pageIndex = -1;
     int pIndexInPage = -1;
@@ -589,13 +637,33 @@ class _MainEditorPageState extends State<MainEditorPage> with TextInputClient {
     }
   }
 
+  String _getFontForMode(EditorMode mode) {
+    switch (mode) {
+      case EditorMode.screenplay:
+        return PageConstants.screenplayFont;
+      case EditorMode.manuscript:
+        return PageConstants.manuscriptFont;
+      case EditorMode.essay:
+        return PageConstants.essayFont;
+      case EditorMode.freestyle:
+        return PageConstants.freestyleFont;
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final margins = _getMargins();
+    final font = _getFontForMode(_controller.currentMode);
     if (_cachedPages == null ||
         _lastPaginatedVersion != _controller.documentVersion ||
         _lastPaginatedMargins != margins) {
-      _cachedPages = Paginator.paginate(_controller.document, margins);
+      _cachedPages = Paginator.paginate(
+        _controller.document,
+        margins,
+        defaultFontFamily: font,
+        dpr: MediaQuery.of(context).devicePixelRatio,
+        zoom: _zoomLevel,
+      );
       _lastPaginatedVersion = _controller.documentVersion;
       _lastPaginatedMargins = margins;
     }
@@ -804,12 +872,9 @@ class _MainEditorPageState extends State<MainEditorPage> with TextInputClient {
                 EditorToolbar(
                   controller: _controller,
                   zoomLevel: _zoomLevel,
-                  onZoomChanged: (val) {
-                    setState(() {
-                      _zoomLevel = val;
-                      _updateVisiblePages();
-                    });
-                  },
+                  onZoomIn: _zoomIn,
+                  onZoomOut: _zoomOut,
+                  onResetZoom: _resetZoom,
                 ),
                 Expanded(
                   child: Focus(
@@ -960,19 +1025,11 @@ class _MainEditorPageState extends State<MainEditorPage> with TextInputClient {
                         onPointerSignal: (pointerSignal) {
                           if (pointerSignal is PointerScrollEvent) {
                             if (HardwareKeyboard.instance.isControlPressed) {
-                              setState(() {
-                                if (pointerSignal.scrollDelta.dy < 0) {
-                                  _zoomLevel = (_zoomLevel + 0.1).clamp(
-                                    1.0,
-                                    3.0,
-                                  );
-                                } else {
-                                  _zoomLevel = (_zoomLevel - 0.1).clamp(
-                                    1.0,
-                                    3.0,
-                                  );
-                                }
-                              });
+                              if (pointerSignal.scrollDelta.dy < 0) {
+                                _zoomIn();
+                              } else {
+                                _zoomOut();
+                              }
                             }
                           }
                         },
@@ -986,7 +1043,7 @@ class _MainEditorPageState extends State<MainEditorPage> with TextInputClient {
                               child: SizedBox(
                                 width:
                                     (PageConstants.pageWidth * _zoomLevel / 2)
-                                        .roundToDouble() *
+                                        .ceilToDouble() *
                                     2,
                                 height:
                                     (((pages.length *
@@ -994,7 +1051,7 @@ class _MainEditorPageState extends State<MainEditorPage> with TextInputClient {
                                                         20.0)) *
                                                 _zoomLevel) /
                                             2)
-                                        .roundToDouble() *
+                                        .ceilToDouble() *
                                     2,
                                 child: Transform.scale(
                                   scale: _zoomLevel,

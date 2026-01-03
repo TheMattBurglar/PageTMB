@@ -3,13 +3,31 @@ import '../models/document.dart';
 import '../constants.dart';
 
 class Paginator {
-  static List<List<Paragraph>> paginate(Document document, EdgeInsets margins) {
+  static List<List<Paragraph>> paginate(
+    Document document,
+    EdgeInsets margins, {
+    String? defaultFontFamily,
+    double dpr = 1.0,
+    double zoom = 1.0,
+  }) {
+    double _pixelLock(double value, {bool forceCeil = false}) {
+      final effectiveDpr = dpr * zoom;
+      if (forceCeil) {
+        return (value * effectiveDpr).ceilToDouble() / effectiveDpr;
+      }
+      return (value * effectiveDpr).roundToDouble() / effectiveDpr;
+    }
+
     List<List<Paragraph>> pages = [[]];
     double currentHeight = 0;
     const double maxHeight = PageConstants.pageHeight;
-    final double availableHeight = maxHeight - margins.top - margins.bottom;
-    final double availableWidth =
-        PageConstants.pageWidth - margins.left - margins.right;
+    final double lockedTop = _pixelLock(margins.top);
+    final double lockedBottom = _pixelLock(margins.bottom);
+    final double availableHeight = maxHeight - lockedTop - lockedBottom;
+    final double availableWidth = _pixelLock(
+      PageConstants.pageWidth - margins.left - margins.right,
+      forceCeil: true,
+    );
 
     for (int i = 0; i < document.paragraphs.length; i++) {
       Paragraph p = document.paragraphs[i].clone();
@@ -18,7 +36,7 @@ class Paginator {
 
       while (true) {
         final double structuralOffset = p.structuralLeftOffset;
-        final double maxWidth = availableWidth - structuralOffset;
+        final double maxWidth = availableWidth - _pixelLock(structuralOffset);
 
         // Caching Logic
         double totalHeight;
@@ -28,6 +46,7 @@ class Paginator {
           final textPainter = p.buildPainter(
             maxWidth: maxWidth,
             lineSpacing: p.lineSpacing,
+            defaultFontFamily: defaultFontFamily,
           );
 
           final double paragraphGap = 0.0;
@@ -71,6 +90,7 @@ class Paginator {
             textPainter = p.buildPainter(
               maxWidth: maxWidth,
               lineSpacing: p.lineSpacing,
+              defaultFontFamily: defaultFontFamily,
             );
           } else {
             // We just measured it in the 'else' block above, but we didn't keep the painter variable in scope.
@@ -80,6 +100,7 @@ class Paginator {
             textPainter = p.buildPainter(
               maxWidth: maxWidth,
               lineSpacing: p.lineSpacing,
+              defaultFontFamily: defaultFontFamily,
             );
           }
           // Paragraph doesn't fit. Try to split it.

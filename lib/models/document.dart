@@ -47,11 +47,12 @@ class TextAttributes {
   TextStyle toTextStyle({
     double height = 1.0,
     bool includeMonospaceBackground = true,
+    String? defaultFontFamily,
   }) {
     return TextStyle(
       fontWeight: bold ? FontWeight.bold : FontWeight.normal,
       fontStyle: italic ? FontStyle.italic : FontStyle.normal,
-      fontFamily: fontFamily,
+      fontFamily: fontFamily ?? defaultFontFamily,
       fontSize: fontSize ?? 12.0,
       height: height,
       backgroundColor: (monospace && includeMonospaceBackground)
@@ -211,6 +212,7 @@ class Paragraph {
     TextAlign? textAlign,
     String? marker,
     double? lineSpacing,
+    String? defaultFontFamily,
   }) {
     final double effectiveLineSpacing = lineSpacing ?? this.lineSpacing;
     final List<InlineSpan> spans = [];
@@ -223,8 +225,13 @@ class Paragraph {
           ? runs.first.attributes.toTextStyle(
               height: effectiveLineSpacing,
               includeMonospaceBackground: type != ParagraphType.codeBlock,
+              defaultFontFamily: defaultFontFamily,
             )
-          : TextStyle(fontSize: 12.0, height: effectiveLineSpacing);
+          : TextStyle(
+              fontSize: 12.0,
+              height: effectiveLineSpacing,
+              fontFamily: defaultFontFamily,
+            );
 
       spans.add(
         TextSpan(
@@ -240,6 +247,7 @@ class Paragraph {
       final style = run.attributes.toTextStyle(
         height: effectiveLineSpacing,
         includeMonospaceBackground: type != ParagraphType.codeBlock,
+        defaultFontFamily: defaultFontFamily,
       );
       final text = run.text;
 
@@ -280,7 +288,7 @@ class Paragraph {
 
     final String? firstFontFamily = runs.isNotEmpty
         ? runs.first.attributes.fontFamily
-        : null;
+        : defaultFontFamily;
     final rootStyle = TextStyle(
       color: Colors.black,
       height: effectiveLineSpacing,
@@ -306,7 +314,11 @@ class Paragraph {
     }
 
     if (maxWidth != null) {
-      tp.layout(minWidth: maxWidth, maxWidth: maxWidth);
+      if (alignment == ParagraphAlignment.left) {
+        tp.layout(maxWidth: maxWidth);
+      } else {
+        tp.layout(minWidth: maxWidth, maxWidth: maxWidth);
+      }
     }
 
     // Ensure empty paragraphs have a height

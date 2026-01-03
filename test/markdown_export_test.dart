@@ -11,7 +11,7 @@ void main() {
             runs: [
               TextRun(
                 text: 'Header 1',
-                attributes: const TextAttributes(bold: true, fontSize: 24.0),
+                attributes: const TextAttributes(bold: true, fontSize: 32.0),
               ),
             ],
           ),
@@ -19,7 +19,7 @@ void main() {
             runs: [
               TextRun(
                 text: 'Header 2',
-                attributes: const TextAttributes(bold: true, fontSize: 20.0),
+                attributes: const TextAttributes(bold: true, fontSize: 26.0),
               ),
             ],
           ),

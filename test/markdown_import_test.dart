@@ -11,13 +11,13 @@ void main() {
 
       final p1 = doc.paragraphs[0];
       expect(p1.runs.first.text, 'Header 1');
-      expect(p1.runs.first.attributes.fontSize, 24.0);
+      expect(p1.runs.first.attributes.fontSize, 32.0);
 
       expect(doc.paragraphs[1].runs.first.text, '');
 
       final p2 = doc.paragraphs[2];
       expect(p2.runs.first.text, 'Header 2');
-      expect(p2.runs.first.attributes.fontSize, 20.0);
+      expect(p2.runs.first.attributes.fontSize, 26.0);
     });
 
     test('Imports tight headers without extra space', () {
@@ -103,11 +103,14 @@ void main() {
     });
 
     test('Imports headers with new font sizes', () {
-      final doc = parseMarkdownToDocument('### H3\n#### H4\n##### H5');
-      expect(doc.paragraphs.length, 3);
-      expect(doc.paragraphs[0].runs.first.attributes.fontSize, 16.0);
-      expect(doc.paragraphs[1].runs.first.attributes.fontSize, 14.0);
-      expect(doc.paragraphs[2].runs.first.attributes.fontSize, 13.0);
+      final doc = parseMarkdownToDocument(
+        '### H3\n#### H4\n##### H5\n###### H6',
+      );
+      expect(doc.paragraphs.length, 4);
+      expect(doc.paragraphs[0].runs.first.attributes.fontSize, 20.0);
+      expect(doc.paragraphs[1].runs.first.attributes.fontSize, 16.0);
+      expect(doc.paragraphs[2].runs.first.attributes.fontSize, 14.0);
+      expect(doc.paragraphs[3].runs.first.attributes.fontSize, 13.0);
     });
   });
 }

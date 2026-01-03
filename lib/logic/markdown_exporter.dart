@@ -75,11 +75,12 @@ class MarkdownExporter {
     if (!firstRun.attributes.bold) return 0;
 
     final fontSize = firstRun.attributes.fontSize ?? 12.0;
-    if (fontSize >= 24.0) return 1;
-    if (fontSize >= 20.0) return 2;
-    if (fontSize >= 16.0) return 3;
-    if (fontSize >= 14.0) return 4;
-    if (fontSize >= 13.0) return 5;
+    if (fontSize >= 32.0) return 1;
+    if (fontSize >= 26.0) return 2;
+    if (fontSize >= 20.0) return 3;
+    if (fontSize >= 16.0) return 4;
+    if (fontSize >= 14.0) return 5;
+    if (fontSize >= 13.0) return 6;
     // We avoid H6 at 12.0 because it's ambiguous with normal bold text
 
     return 0;
