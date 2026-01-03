@@ -61,6 +61,10 @@ class EditorController extends ChangeNotifier {
   bool _isTyping = false;
   Timer? _typingTimer;
 
+  // Notification stream
+  final _notificationController = StreamController<String>.broadcast();
+  Stream<String> get notificationStream => _notificationController.stream;
+
   final SpellChecker _spellChecker = SpellChecker();
   int _documentVersion = 0;
   int get documentVersion => _documentVersion;
@@ -1668,6 +1672,7 @@ class EditorController extends ChangeNotifier {
   @override
   void dispose() {
     _typingTimer?.cancel();
+    _notificationController.close();
     super.dispose();
   }
 
@@ -1776,6 +1781,7 @@ class EditorController extends ChangeNotifier {
     await file.writeAsString(jsonString);
     _currentFilePath = path;
     _isDirty = false;
+    _notificationController.add('Saved');
     notifyListeners();
   }
 

@@ -10,7 +10,7 @@ class Paginator {
     double dpr = 1.0,
     double zoom = 1.0,
   }) {
-    double _pixelLock(double value, {bool forceCeil = false}) {
+    double pixelLock(double value, {bool forceCeil = false}) {
       final effectiveDpr = dpr * zoom;
       if (forceCeil) {
         return (value * effectiveDpr).ceilToDouble() / effectiveDpr;
@@ -21,10 +21,10 @@ class Paginator {
     List<List<Paragraph>> pages = [[]];
     double currentHeight = 0;
     const double maxHeight = PageConstants.pageHeight;
-    final double lockedTop = _pixelLock(margins.top);
-    final double lockedBottom = _pixelLock(margins.bottom);
+    final double lockedTop = pixelLock(margins.top);
+    final double lockedBottom = pixelLock(margins.bottom);
     final double availableHeight = maxHeight - lockedTop - lockedBottom;
-    final double availableWidth = _pixelLock(
+    final double availableWidth = pixelLock(
       PageConstants.pageWidth - margins.left - margins.right,
       forceCeil: true,
     );
@@ -36,7 +36,7 @@ class Paginator {
 
       while (true) {
         final double structuralOffset = p.structuralLeftOffset;
-        final double maxWidth = availableWidth - _pixelLock(structuralOffset);
+        final double maxWidth = availableWidth - pixelLock(structuralOffset);
 
         // Caching Logic
         double totalHeight;
@@ -106,40 +106,77 @@ class Paginator {
           // Paragraph doesn't fit. Try to split it.
           final remainingSpace = availableHeight - currentHeight;
 
-          // If we have very little space left, don't even try to split, just move to next page.
-          // Unless it's an empty page, then we HAVE to fit at least something or skip it.
-          if (remainingSpace < (p.lineSpacing * 20.0) &&
-              pages.last.isNotEmpty) {
+          // If available space is too small for even one line, skip to next page.
+          // We use a safe/arbitrary min height check, or rely on metrics below.
+          if (remainingSpace < 10.0 && pages.last.isNotEmpty) {
             pages.add([]);
             currentHeight = 0;
             continue;
           }
 
-          // Find where the page break hits
-          final splitPosition = textPainter.getPositionForOffset(
-            Offset(availableWidth, remainingSpace),
-          );
-          final splitOffset = splitPosition.offset;
+          final metrics = textPainter.computeLineMetrics();
+          double usedHeight = 0.0;
+          int lastFittingLineIndex = -1;
 
-          final fullText = p.runs.map((r) => r.text).join();
-          if (splitOffset <= 0 || splitOffset >= fullText.length) {
+          for (int i = 0; i < metrics.length; i++) {
+            final line = metrics[i];
+            if (usedHeight + line.height <= remainingSpace + 0.5) {
+              // 0.5 epsilon for float precision
+              usedHeight += line.height;
+              lastFittingLineIndex = i;
+            } else {
+              break;
+            }
+          }
+
+          if (lastFittingLineIndex == -1) {
+            // No lines fit.
             if (pages.last.isNotEmpty) {
               pages.add([]);
               currentHeight = 0;
               continue;
             } else {
-              // Even on fresh page it doesn't fit? This shouldn't happen for US letter
-              // but let's be safe.
+              // Forced to fit at least one line if page is empty
+              // But if it truly doesn't fit, we might just clip?
+              // Standard behavior: Force at least one line or push.
+              // If page is empty, we must take at least one line even if it clips,
+              // or else infinite loop.
+              lastFittingLineIndex = 0;
+              usedHeight = metrics.isNotEmpty ? metrics[0].height : 0.0;
+            }
+          }
+
+          // Use the end of the last fitting line as the split point
+          // Query position at the bottom-right of the calculated usedHeight
+          final splitPosition = textPainter.getPositionForOffset(
+            Offset(availableWidth, usedHeight - 0.1),
+          );
+          final splitOffset = splitPosition.offset;
+
+          final fullText = p.runs.map((r) => r.text).join();
+          if (splitOffset <= 0 || splitOffset >= fullText.length) {
+            // If splitOffset encompasses whole remaining text (e.g. slight rounding error),
+            // just add the whole paragraph.
+            if (splitOffset >= fullText.length) {
               pages.last.add(p);
-              currentHeight = totalHeight;
+              currentHeight += totalHeight;
               break;
             }
+            // If 0, pushing entire p to next page
+            if (pages.last.isNotEmpty) {
+              pages.add([]);
+              currentHeight = 0;
+              continue;
+            }
+            // Should not happen if logic holds, but safe fallback
           }
 
           // Split the paragraph
           final parts = _splitParagraphAt(p, splitOffset);
-          parts[0].cachedHeight = remainingSpace;
+          parts[0].cachedHeight =
+              usedHeight; // Explicitly set height to what fits!
           parts[0].cachedWidth = availableWidth;
+
           pages.last.add(parts[0]);
           pages.add([]);
           currentHeight = 0;

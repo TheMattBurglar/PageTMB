@@ -8,6 +8,8 @@ import 'package:flutter/widgets.dart' show TextRange;
 class SpellChecker {
   final HashSet<String> _dictionary = HashSet();
   final HashSet<String> _userDictionary = HashSet();
+  final Map<int, List<String>> _dictionaryByLength = {};
+
   bool _isLoaded = false;
   File? _userDictFile;
 
@@ -30,6 +32,7 @@ class SpellChecker {
         if (word == 'tst') continue;
 
         _dictionary.add(word);
+        _dictionaryByLength.putIfAbsent(word.length, () => []).add(word);
       }
 
       // 2. Load user dictionary
@@ -42,7 +45,11 @@ class SpellChecker {
           for (final line in userLines) {
             final word = line.trim();
             if (word.isNotEmpty) {
-              _userDictionary.add(word.toLowerCase());
+              final lower = word.toLowerCase();
+              _userDictionary.add(lower);
+              _dictionaryByLength
+                  .putIfAbsent(lower.length, () => [])
+                  .add(lower);
             }
           }
         }
@@ -65,6 +72,9 @@ class SpellChecker {
     if (!_userDictionary.contains(lowerWord) &&
         !_dictionary.contains(lowerWord)) {
       _userDictionary.add(lowerWord);
+      _dictionaryByLength
+          .putIfAbsent(lowerWord.length, () => [])
+          .add(lowerWord);
       await _persistUserDictionary();
     }
   }
@@ -116,19 +126,26 @@ class SpellChecker {
     if (!_isLoaded || word.isEmpty) return [];
 
     final lowerWord = word.toLowerCase();
+    // Optimization: If it's correctly spelled (or we have it), return empty?
+    // User logic said: if (!isMisspelled(word)) return [];
     if (!isMisspelled(word)) return [];
 
-    // Simple Levenshtein distance search
+    // Simple Levenshtein distance search optimized by length buckets
     final List<MapEntry<String, int>> candidates = [];
     final int wordLen = lowerWord.length;
-    final allWords = _dictionary.union(_userDictionary);
 
-    for (final dictWord in allWords) {
-      if ((dictWord.length - wordLen).abs() > 2) continue;
-
-      final dist = _levenshtein(lowerWord, dictWord);
-      if (dist <= 2) {
-        candidates.add(MapEntry(dictWord, dist));
+    // Check only words involving length +/- 2
+    for (int len = wordLen - 2; len <= wordLen + 2; len++) {
+      if (len < 1) continue;
+      final bucket = _dictionaryByLength[len];
+      if (bucket != null) {
+        for (final dictWord in bucket) {
+          // Pass maxDist 2 to early exit
+          final dist = _levenshtein(lowerWord, dictWord, 2);
+          if (dist <= 2) {
+            candidates.add(MapEntry(dictWord, dist));
+          }
+        }
       }
     }
 
@@ -136,33 +153,47 @@ class SpellChecker {
     return candidates.take(5).map((e) => e.key).toList();
   }
 
-  int _levenshtein(String s, String t) {
+  int _levenshtein(String s, String t, int maxDist) {
     if (s == t) return 0;
-    if (s.isEmpty) return t.length;
-    if (t.isEmpty) return s.length;
+    if ((s.length - t.length).abs() > maxDist) return maxDist + 1;
 
-    List<int> v0 = List<int>.filled(t.length + 1, 0);
-    List<int> v1 = List<int>.filled(t.length + 1, 0);
-
-    for (int i = 0; i < t.length + 1; i++) {
-      v0[i] = i;
-    }
+    // Use two rows instead of full matrix to save memory
+    // current represents the 'previous' row (initially row 0)
+    // next represents the 'current' row being calculated
+    List<int> current = List<int>.generate(t.length + 1, (i) => i);
+    List<int> next = List<int>.filled(t.length + 1, 0);
 
     for (int i = 0; i < s.length; i++) {
-      v1[0] = i + 1;
+      next[0] = i + 1;
+      int minRowDist = next[0]; // Track minimum distance in this row
+
       for (int j = 0; j < t.length; j++) {
-        int cost = (s[i] == t[j]) ? 0 : 1;
-        v1[j + 1] = [
-          v1[j] + 1,
-          v0[j + 1] + 1,
-          v0[j] + cost,
-        ].reduce((a, b) => a < b ? a : b);
+        final cost = (s.codeUnitAt(i) == t.codeUnitAt(j)) ? 0 : 1;
+
+        // Inline min calculation for performance
+        final insert = next[j] + 1;
+        final delete = current[j + 1] + 1;
+        final sub = current[j] + cost;
+
+        int val = insert;
+        if (delete < val) val = delete;
+        if (sub < val) val = sub;
+
+        next[j + 1] = val;
+
+        if (val < minRowDist) minRowDist = val;
       }
-      for (int j = 0; j < t.length + 1; j++) {
-        v0[j] = v1[j];
-      }
+
+      // Early exit if the entire row exceeds maxDist
+      if (minRowDist > maxDist) return maxDist + 1;
+
+      // Swap arrays
+      final temp = current;
+      current = next;
+      next = temp;
     }
-    return v1[t.length];
+
+    return current[t.length];
   }
 
   /// Finds all misspelled words in the given text range.

@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter/gestures.dart';
@@ -108,6 +109,12 @@ class _MainEditorPageState extends State<MainEditorPage> with TextInputClient {
   int _firstVisiblePage = 0;
   int _lastVisiblePage = 1;
 
+  // Notifications
+  StreamSubscription<String>? _notificationSubscription;
+  String _notificationMessage = '';
+  bool _showNotification = false;
+  Timer? _notificationTimer;
+
   @override
   void initState() {
     super.initState();
@@ -118,6 +125,25 @@ class _MainEditorPageState extends State<MainEditorPage> with TextInputClient {
       lineSpacing: _getLineSpacing(),
       fontFamily: _getFontFamily(),
     );
+
+    _notificationSubscription = _controller.notificationStream.listen((
+      message,
+    ) {
+      if (mounted) {
+        setState(() {
+          _notificationMessage = message;
+          _showNotification = true;
+        });
+        _notificationTimer?.cancel();
+        _notificationTimer = Timer(const Duration(seconds: 2), () {
+          if (mounted) {
+            setState(() {
+              _showNotification = false;
+            });
+          }
+        });
+      }
+    });
 
     _scrollController.addListener(_onScroll);
     _focusNode.addListener(_handleFocusChange);
@@ -155,6 +181,8 @@ class _MainEditorPageState extends State<MainEditorPage> with TextInputClient {
 
   @override
   void dispose() {
+    _notificationSubscription?.cancel();
+    _notificationTimer?.cancel();
     _controller.removeListener(_onControllerUpdate);
     _controller.dispose();
     _focusNode.removeListener(_handleFocusChange);
@@ -1214,6 +1242,28 @@ class _MainEditorPageState extends State<MainEditorPage> with TextInputClient {
                   totalMatches: _controller.searchResults.length,
                 ),
               ),
+            Positioned(
+              bottom: 20,
+              right: 20,
+              child: AnimatedOpacity(
+                opacity: _showNotification ? 1.0 : 0.0,
+                duration: const Duration(milliseconds: 300),
+                child: Container(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 16,
+                    vertical: 8,
+                  ),
+                  decoration: BoxDecoration(
+                    color: Colors.black.withValues(alpha: 0.8),
+                    borderRadius: BorderRadius.circular(20),
+                  ),
+                  child: Text(
+                    _notificationMessage,
+                    style: const TextStyle(color: Colors.white),
+                  ),
+                ),
+              ),
+            ),
           ],
         ),
       ),
